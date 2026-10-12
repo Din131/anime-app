@@ -107,14 +107,29 @@
   });
 
   // ---------- Status video untuk Picture-in-Picture ----------
-  function report(e) {
-    var v = e.target;
-    if (!v || v.tagName !== 'VIDEO' || !window.AniView) return;
-    try { window.AniView.onVideoState(!v.paused && !v.ended, v.videoWidth || 0, v.videoHeight || 0); } catch (_) {}
+  // Hanya video yang benar-benar ditonton yang dihitung: sedang jalan, bersuara, dan
+  // cukup besar. Trailer/preview yang diputar otomatis tanpa suara tidak dihitung.
+  function watchedVideo() {
+    var vids = document.getElementsByTagName('video');
+    for (var i = 0; i < vids.length; i++) {
+      var v = vids[i];
+      if (v.paused || v.ended || v.muted || v.volume === 0 || v.readyState < 3) continue;
+      if (v.getBoundingClientRect().width < 150) continue;
+      return v;
+    }
+    return null;
   }
-  ['playing', 'pause', 'ended', 'loadedmetadata'].forEach(function (ev) {
+  function report() {
+    if (!window.AniView) return;
+    var v = watchedVideo();
+    try { window.AniView.onVideoState(!!v, v ? v.videoWidth : 0, v ? v.videoHeight : 0); } catch (_) {}
+  }
+  ['playing', 'pause', 'ended', 'emptied', 'volumechange'].forEach(function (ev) {
     document.addEventListener(ev, report, true);
   });
+  // Detak berkala: aplikasi menganggap video berhenti kalau detak ini tidak datang lagi
+  // (misalnya halaman episode sudah ditinggalkan).
+  setInterval(function () { if (watchedVideo()) report(); }, 2000);
 
   // ---------- Mode PiP: perbesar video (atau iframe player) memenuhi jendela ----------
   var PIP_STYLE = 'position:fixed!important;top:0!important;left:0!important;width:100vw!important;' +

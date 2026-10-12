@@ -56,6 +56,25 @@ class MainActivity : AppCompatActivity() {
 
     // Picture-in-Picture
     private var videoPlaying = false
+    private var lastPlayingAt = 0L
+
+    /** Kalau detak "video sedang diputar" berhenti datang, anggap video sudah berhenti. */
+    private val playWatchdog = object : Runnable {
+        override fun run() {
+            if (videoPlaying && !isInPictureInPictureMode &&
+                System.currentTimeMillis() - lastPlayingAt > 5000) {
+                videoPlaying = false
+                updatePipParams()
+            }
+            webView.postDelayed(this, 2000)
+        }
+    }
+
+    private fun stopVideoState() {
+        if (!videoPlaying) return
+        videoPlaying = false
+        updatePipParams()
+    }
     private var videoRatio = Rational(16, 9)
     private val pipSupported by lazy {
         packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
@@ -146,6 +165,8 @@ class MainActivity : AppCompatActivity() {
             WebViewCompat.addDocumentStartJavaScript(webView, playerJs, setOf("*"))
         }
 
+        webView.postDelayed(playWatchdog, 2000)
+
         errorView.setOnClickListener {
             errorView.visibility = View.GONE
             webView.reload()
@@ -211,6 +232,7 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun onVideoState(playing: Boolean, width: Int, height: Int) {
             runOnUiThread {
+                if (playing) lastPlayingAt = System.currentTimeMillis()
                 videoPlaying = playing
                 if (width > 0 && height > 0) {
                     // Batas rasio yang diizinkan Android: 1:2.39 sampai 2.39:1
@@ -305,6 +327,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        webView.removeCallbacks(playWatchdog)
         webView.destroy()
         super.onDestroy()
     }
@@ -399,6 +422,8 @@ class MainActivity : AppCompatActivity() {
 
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
             errorView.visibility = View.GONE
+            // Pindah halaman: video di halaman sebelumnya sudah tidak diputar
+            stopVideoState()
         }
 
         override fun onPageFinished(view: WebView, url: String?) {

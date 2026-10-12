@@ -30,6 +30,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -55,6 +56,8 @@ class MainActivity : AppCompatActivity() {
     private val hideIndicator = Runnable { gestureIndicator.visibility = View.GONE }
 
     // Picture-in-Picture
+    @Volatile private var keepSplash = true
+
     private var videoPlaying = false
     private var lastPlayingAt = 0L
 
@@ -91,6 +94,14 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Splash screen: tampil sampai halaman pertama siap (maksimal 4 detik)
+        val splash = installSplashScreen()
+        keepSplash = savedInstanceState == null
+        splash.setKeepOnScreenCondition { keepSplash }
+        splash.setOnExitAnimationListener { provider ->
+            provider.view.animate().alpha(0f).setDuration(300L)
+                .withEndAction { provider.remove() }.start()
+        }
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         AdBlocker.init(this)
@@ -166,6 +177,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.postDelayed(playWatchdog, 2000)
+        webView.postDelayed({ keepSplash = false }, 4000)
 
         errorView.setOnClickListener {
             errorView.visibility = View.GONE
@@ -427,6 +439,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onPageFinished(view: WebView, url: String?) {
+            keepSplash = false
             initialLoad = false
             view.evaluateJavascript(adHideJs, null)
         }
@@ -441,6 +454,8 @@ class MainActivity : AppCompatActivity() {
     private inner class Chrome : WebChromeClient() {
 
         override fun onProgressChanged(view: WebView, newProgress: Int) {
+            // Halaman sudah cukup tampil: tutup splash tanpa menunggu iklan/gambar terakhir
+            if (newProgress >= 80) keepSplash = false
             progress.progress = newProgress
             progress.visibility = if (newProgress < 100) View.VISIBLE else View.GONE
         }

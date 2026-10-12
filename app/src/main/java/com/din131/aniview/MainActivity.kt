@@ -171,6 +171,8 @@ class MainActivity : AppCompatActivity() {
             initialLoad = false
         } else {
             webView.loadUrl(startUrl)
+            // Cek versi baru di GitHub Releases
+            UpdateChecker(this).checkInBackground()
         }
     }
 

@@ -9,5 +9,13 @@
     <string name="link_blocked">Link ke %1$s diblokir</string>
     <string name="gesture_brightness">☀  Kecerahan %1$d%%</string>
     <string name="gesture_volume">🔊  Volume %1$d%%</string>
+    <string name="update_title">Update tersedia</string>
+    <string name="update_message">Versi baru %1$s sudah tersedia.\nVersi terpasang: %2$s.</string>
+    <string name="update_now">Update</string>
+    <string name="update_later">Nanti</string>
+    <string name="update_skip">Lewati versi ini</string>
+    <string name="update_downloading">Mengunduh update…</string>
+    <string name="update_failed">Gagal mengunduh update</string>
+    <string name="update_allow_install">Izinkan AniView memasang aplikasi, lalu buka lagi untuk update</string>
     <string name="press_back_again">Tekan kembali sekali lagi untuk keluar</string>
 </resources>

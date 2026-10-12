@@ -30,6 +30,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -84,6 +85,26 @@ class MainActivity : AppCompatActivity() {
         gestureBar = findViewById(R.id.gestureBar)
         audio = getSystemService(AUDIO_SERVICE) as AudioManager
         fullscreenContainer.listener = gestureListener
+
+        // Beri jarak untuk status bar, navigasi, notch, dan keyboard
+        // (Android 15+ menggambar aplikasi sampai ke belakang status bar).
+        // Saat video fullscreen, jarak dihilangkan supaya video penuh satu layar.
+        val root = findViewById<View>(R.id.root)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            if (customView != null) {
+                v.setPadding(0, 0, 0, 0)
+            } else {
+                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+                val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+                v.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            }
+            WindowInsetsCompat.CONSUMED
+        }
+        // Ikon status bar putih di atas latar gelap
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
 
         val startUrl = getString(R.string.start_url)
         Uri.parse(startUrl).host?.let { allowedDomains.add(baseDomain(it)) }
@@ -409,6 +430,7 @@ class MainActivity : AppCompatActivity() {
             fullscreenContainer.visibility = View.VISIBLE
             webView.visibility = View.GONE
             setSystemBarsHidden(true)
+            ViewCompat.requestApplyInsets(findViewById(R.id.root))
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         }
 
@@ -421,6 +443,7 @@ class MainActivity : AppCompatActivity() {
             customViewCallback?.onCustomViewHidden()
             customViewCallback = null
             setSystemBarsHidden(false)
+            ViewCompat.requestApplyInsets(findViewById(R.id.root))
             resetBrightness()
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }

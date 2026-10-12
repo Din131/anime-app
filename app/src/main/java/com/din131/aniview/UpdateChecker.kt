@@ -112,7 +112,7 @@ class UpdateChecker(private val activity: Activity) {
             dir.listFiles()?.forEach { if (it.name.endsWith(".apk")) it.delete() } // hapus unduhan lama
         }
         val request = DownloadManager.Request(Uri.parse(url))
-            .setTitle("AniView $tag")
+            .setTitle(activity.getString(R.string.app_name) + " $tag")
             .setDescription(activity.getString(R.string.update_downloading))
             .setMimeType("application/vnd.android.package-archive")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)

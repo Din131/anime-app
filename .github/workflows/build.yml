@@ -45,7 +45,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
-          name: AniView v1.0.${{ github.run_number }}
+          name: Anikoto Watch v1.0.${{ github.run_number }}
           body: Unduh **AniView.apk** di bawah, lalu install di HP.
           files: AniView.apk
           make_latest: true

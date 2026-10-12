@@ -1,4 +1,4 @@
-# AniView
+# Anikoto Watch
 
 Aplikasi Android pribadi untuk membuka situs anime tanpa browser, dengan adblock bawaan.
 

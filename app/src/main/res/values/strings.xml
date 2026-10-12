@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">AniView</string>
+    <string name="app_name">Anikoto Watch</string>
 
     <!-- Alamat situs yang dibuka. Kalau situsnya ganti domain, cukup ubah baris ini. -->
     <string name="start_url" translatable="false">https://anikototv.to/home</string>
@@ -16,6 +16,6 @@
     <string name="update_skip">Lewati versi ini</string>
     <string name="update_downloading">Mengunduh update…</string>
     <string name="update_failed">Gagal mengunduh update</string>
-    <string name="update_allow_install">Izinkan AniView memasang aplikasi, lalu buka lagi untuk update</string>
+    <string name="update_allow_install">Izinkan Anikoto Watch memasang aplikasi, lalu buka lagi untuk update</string>
     <string name="press_back_again">Tekan kembali sekali lagi untuk keluar</string>
 </resources>

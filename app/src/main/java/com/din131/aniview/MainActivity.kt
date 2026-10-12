@@ -60,6 +60,7 @@ class MainActivity : AppCompatActivity() {
         packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
     }
 
+    private var popupView: WebView? = null
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
 
@@ -133,6 +134,7 @@ class MainActivity : AppCompatActivity() {
             override fun handleOnBackPressed() {
                 when {
                     customView != null -> webView.webChromeClient?.onHideCustomView()
+                    popupView != null -> popupView!!.let { if (it.canGoBack()) it.goBack() else closePopup() }
                     webView.canGoBack() -> webView.goBack()
                     System.currentTimeMillis() - lastBackPress < 2000 -> finish()
                     else -> {
@@ -170,6 +172,8 @@ class MainActivity : AppCompatActivity() {
     override fun onStop() {
         // Jendela PiP ditutup / aplikasi benar-benar di belakang
         webView.onPause()
+        // Simpan cookie login ke disk supaya tetap login setelah aplikasi ditutup
+        CookieManager.getInstance().flush()
         super.onStop()
     }
 
@@ -296,6 +300,20 @@ class MainActivity : AppCompatActivity() {
         return allowedDomains.any { h == it || h.endsWith(".$it") }
     }
 
+    /** Halaman login & captcha pihak ketiga yang boleh dibuka. */
+    private val authDomains = setOf(
+        "accounts.google.com", "accounts.youtube.com", "www.google.com",
+        "discord.com", "discordapp.com",
+        "facebook.com", "x.com", "twitter.com", "appleid.apple.com",
+        "challenges.cloudflare.com", "hcaptcha.com"
+    )
+
+    private fun isAuth(host: String?): Boolean {
+        if (host.isNullOrEmpty()) return false
+        val h = host.lowercase()
+        return authDomains.any { h == it || h.endsWith(".$it") }
+    }
+
     private fun blockedToast(host: String?) {
         if (host.isNullOrEmpty()) return
         Toast.makeText(this, getString(R.string.link_blocked, host), Toast.LENGTH_SHORT).show()
@@ -344,7 +362,7 @@ class MainActivity : AppCompatActivity() {
             // Navigasi di dalam iframe player dibiarkan
             if (!request.isForMainFrame) return false
 
-            if (isAllowed(host)) return false
+            if (isAllowed(host) || isAuth(host)) return false
 
             // Saat pertama buka, ikuti redirect domain (misalnya situs pindah domain)
             if (initialLoad && request.isRedirect && host != null) {
@@ -408,34 +426,84 @@ class MainActivity : AppCompatActivity() {
         }
 
         /**
-         * Tab/jendela baru: tangkap URL tujuannya. Kalau masih situs yang sama,
-         * buka di jendela utama; kalau domain lain (iklan), buang.
+         * Tab/jendela baru: tangkap URL tujuannya.
+         * - Situs yang sama  -> buka di jendela utama
+         * - Halaman login (Google, Discord, dll.) -> tampilkan sebagai jendela pop-up
+         * - Domain lain (iklan) -> buang
          */
         override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
             if (!isUserGesture) return false
             val temp = WebView(this@MainActivity)
+            setupWebView(temp)
             temp.webViewClient = object : WebViewClient() {
-                private var handled = false
-                private fun handle(url: Uri?) {
-                    if (handled) return
-                    handled = true
-                    if (url != null && isAllowed(url.host)) webView.loadUrl(url.toString())
-                    else blockedToast(url?.host)
-                    temp.post { temp.destroy() }
+                private var decided = false
+
+                /** true = batalkan pemuatan */
+                private fun decide(url: Uri?): Boolean {
+                    val scheme = url?.scheme?.lowercase()
+                    if (url == null || scheme == "about" || scheme == "javascript") return false // tunggu URL sebenarnya
+                    decided = true
+                    return when {
+                        isAuth(url.host) -> { showPopup(temp); false }
+                        isAllowed(url.host) -> {
+                            webView.loadUrl(url.toString())
+                            temp.post { temp.destroy() }
+                            true
+                        }
+                        else -> {
+                            blockedToast(url.host)
+                            temp.post { temp.destroy() }
+                            true
+                        }
+                    }
                 }
+
                 override fun shouldOverrideUrlLoading(v: WebView, request: WebResourceRequest): Boolean {
-                    handle(request.url)
-                    return true
+                    // Setelah jadi pop-up login, biarkan alurnya berpindah domain
+                    if (decided) return false
+                    return decide(request.url)
                 }
+
                 override fun onPageStarted(v: WebView, url: String?, favicon: Bitmap?) {
-                    v.stopLoading()
-                    handle(url?.let { Uri.parse(it) })
+                    if (!decided && decide(url?.let { Uri.parse(it) })) v.stopLoading()
                 }
+            }
+            temp.webChromeClient = object : WebChromeClient() {
+                override fun onCloseWindow(window: WebView) = closePopup()
             }
             (resultMsg.obj as WebView.WebViewTransport).webView = temp
             resultMsg.sendToTarget()
             return true
         }
+    }
+
+    // ---------- Pop-up login ----------
+
+    private fun showPopup(popup: WebView) {
+        if (popupView === popup) return
+        closePopup()
+        popupView = popup
+        findViewById<FrameLayout>(R.id.root).addView(popup, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    }
+
+    private fun closePopup() {
+        val p = popupView ?: return
+        popupView = null
+        findViewById<FrameLayout>(R.id.root).removeView(p)
+        p.post { p.destroy() }
+        CookieManager.getInstance().flush()
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupWebView(w: WebView) {
+        with(w.settings) {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            userAgentString = userAgentString.replace("; wv", "")
+        }
+        CookieManager.getInstance().setAcceptThirdPartyCookies(w, true)
+        w.setBackgroundColor(getColor(R.color.bg))
     }
 
     private fun setSystemBarsHidden(hidden: Boolean) {

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AniView</string>
+
+    <!-- Alamat situs yang dibuka. Kalau situsnya ganti domain, cukup ubah baris ini. -->
+    <string name="start_url" translatable="false">https://anikoto.su/</string>
+
+    <string name="load_error">Gagal memuat halaman.\nKetuk untuk coba lagi.</string>
+    <string name="link_blocked">Link ke %1$s diblokir</string>
+    <string name="press_back_again">Tekan kembali sekali lagi untuk keluar</string>
+</resources>

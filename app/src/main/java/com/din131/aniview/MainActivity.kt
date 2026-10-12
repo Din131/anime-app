@@ -25,6 +25,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import java.io.ByteArrayInputStream
 
 class MainActivity : AppCompatActivity() {
@@ -83,6 +85,13 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = Client()
         webView.webChromeClient = Chrome()
         webView.setDownloadListener { _, _, _, _, _ -> /* abaikan unduhan (biasanya iklan) */ }
+
+        // Ketuk 2x kiri/kanan video untuk mundur/maju 10 detik.
+        // Disuntikkan ke semua frame, termasuk iframe player dari domain lain.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            val seekJs = assets.open("seek.js").bufferedReader().use { it.readText() }
+            WebViewCompat.addDocumentStartJavaScript(webView, seekJs, setOf("*"))
+        }
 
         errorView.setOnClickListener {
             errorView.visibility = View.GONE

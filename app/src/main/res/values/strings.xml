@@ -7,5 +7,7 @@
 
     <string name="load_error">Gagal memuat halaman.\nKetuk untuk coba lagi.</string>
     <string name="link_blocked">Link ke %1$s diblokir</string>
+    <string name="gesture_brightness">☀  Kecerahan %1$d%%</string>
+    <string name="gesture_volume">🔊  Volume %1$d%%</string>
     <string name="press_back_again">Tekan kembali sekali lagi untuk keluar</string>
 </resources>

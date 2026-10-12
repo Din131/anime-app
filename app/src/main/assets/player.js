@@ -81,6 +81,51 @@
     lastTime = now; lastX = t.clientX; lastSide = side;
   }, { capture: true, passive: false });
 
+  // ---------- Status video untuk Picture-in-Picture ----------
+  function report(e) {
+    var v = e.target;
+    if (!v || v.tagName !== 'VIDEO' || !window.AniView) return;
+    try { window.AniView.onVideoState(!v.paused && !v.ended, v.videoWidth || 0, v.videoHeight || 0); } catch (_) {}
+  }
+  ['playing', 'pause', 'ended', 'loadedmetadata'].forEach(function (ev) {
+    document.addEventListener(ev, report, true);
+  });
+
+  // ---------- Mode PiP: perbesar video (atau iframe player) memenuhi jendela ----------
+  var PIP_STYLE = 'position:fixed!important;top:0!important;left:0!important;width:100vw!important;' +
+    'height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;' +
+    'z-index:2147483647!important;background:#000!important;object-fit:contain!important;transform:none!important';
+  var pipEl = null, pipOld = null;
+
+  function largestIframe() {
+    var fr = document.getElementsByTagName('iframe'), best = null, area = 0;
+    for (var i = 0; i < fr.length; i++) {
+      var r = fr[i].getBoundingClientRect(), a = r.width * r.height;
+      if (a > area) { area = a; best = fr[i]; }
+    }
+    return area > 20000 ? best : null;
+  }
+
+  function setPip(on) {
+    if (on && !pipEl) {
+      var v = biggestVideo();
+      pipEl = (v && v.getBoundingClientRect().width > 100) ? v : largestIframe();
+      if (pipEl) { pipOld = pipEl.getAttribute('style'); pipEl.setAttribute('style', (pipOld || '') + ';' + PIP_STYLE); }
+    } else if (!on && pipEl) {
+      if (pipOld === null) pipEl.removeAttribute('style'); else pipEl.setAttribute('style', pipOld);
+      pipEl = null; pipOld = null;
+    }
+    // Teruskan ke semua iframe di dalamnya
+    var fr = document.getElementsByTagName('iframe');
+    for (var i = 0; i < fr.length; i++) {
+      try { fr[i].contentWindow.postMessage({ __aniviewPip: on }, '*'); } catch (_) {}
+    }
+  }
+  window.__aniviewPip = setPip;
+  window.addEventListener('message', function (e) {
+    if (e.data && typeof e.data === 'object' && '__aniviewPip' in e.data) setPip(!!e.data.__aniviewPip);
+  });
+
   // Matikan double-click bawaan player di zona kiri/kanan
   document.addEventListener('dblclick', function (e) {
     var video = biggestVideo();

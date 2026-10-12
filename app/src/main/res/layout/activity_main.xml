@@ -33,11 +33,42 @@
         android:textSize="16sp"
         android:visibility="gone" />
 
-    <!-- Wadah video saat fullscreen -->
-    <FrameLayout
+    <!-- Wadah video saat fullscreen (geser kiri = kecerahan, kanan = volume) -->
+    <com.din131.aniview.GestureFrameLayout
         android:id="@+id/fullscreenContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#FF000000"
         android:visibility="gone" />
+
+    <!-- Indikator kecerahan / volume -->
+    <LinearLayout
+        android:id="@+id/gestureIndicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/indicator_bg"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingHorizontal="24dp"
+        android:paddingVertical="14dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/gestureText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <ProgressBar
+            android:id="@+id/gestureBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="140dp"
+            android:layout_height="4dp"
+            android:layout_marginTop="8dp"
+            android:max="100"
+            android:progressTint="@color/accent" />
+    </LinearLayout>
 </FrameLayout>

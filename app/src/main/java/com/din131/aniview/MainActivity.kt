@@ -1,11 +1,19 @@
 package com.din131.aniview
 
 import android.annotation.SuppressLint
+import android.app.PictureInPictureParams
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Bitmap
+import android.media.AudioManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Message
+import android.provider.Settings
+import android.util.Rational
+import android.webkit.JavascriptInterface
 import android.view.View
 import android.view.WindowManager
 import android.webkit.CookieManager
@@ -34,7 +42,23 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var progress: ProgressBar
     private lateinit var errorView: TextView
-    private lateinit var fullscreenContainer: FrameLayout
+    private lateinit var fullscreenContainer: GestureFrameLayout
+    private lateinit var gestureIndicator: View
+    private lateinit var gestureText: TextView
+    private lateinit var gestureBar: ProgressBar
+    private lateinit var audio: AudioManager
+
+    // Gestur kecerahan / volume
+    private var brightness = 0.5f
+    private var volume = 0f
+    private val hideIndicator = Runnable { gestureIndicator.visibility = View.GONE }
+
+    // Picture-in-Picture
+    private var videoPlaying = false
+    private var videoRatio = Rational(16, 9)
+    private val pipSupported by lazy {
+        packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+    }
 
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
@@ -54,6 +78,11 @@ class MainActivity : AppCompatActivity() {
         progress = findViewById(R.id.progress)
         errorView = findViewById(R.id.errorView)
         fullscreenContainer = findViewById(R.id.fullscreenContainer)
+        gestureIndicator = findViewById(R.id.gestureIndicator)
+        gestureText = findViewById(R.id.gestureText)
+        gestureBar = findViewById(R.id.gestureBar)
+        audio = getSystemService(AUDIO_SERVICE) as AudioManager
+        fullscreenContainer.listener = gestureListener
 
         val startUrl = getString(R.string.start_url)
         Uri.parse(startUrl).host?.let { allowedDomains.add(baseDomain(it)) }
@@ -85,12 +114,14 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = Client()
         webView.webChromeClient = Chrome()
         webView.setDownloadListener { _, _, _, _, _ -> /* abaikan unduhan (biasanya iklan) */ }
+        // Jembatan kecil: player.js hanya melaporkan status putar video (untuk PiP)
+        webView.addJavascriptInterface(Bridge(), "AniView")
 
         // Ketuk 2x kiri/kanan video untuk mundur/maju 10 detik.
         // Disuntikkan ke semua frame, termasuk iframe player dari domain lain.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            val seekJs = assets.open("seek.js").bufferedReader().use { it.readText() }
-            WebViewCompat.addDocumentStartJavaScript(webView, seekJs, setOf("*"))
+            val playerJs = assets.open("player.js").bufferedReader().use { it.readText() }
+            WebViewCompat.addDocumentStartJavaScript(webView, playerJs, setOf("*"))
         }
 
         errorView.setOnClickListener {
@@ -131,8 +162,119 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
-        webView.onPause()
+        // Saat masuk PiP video harus tetap jalan
+        if (!isInPictureInPictureMode) webView.onPause()
         super.onPause()
+    }
+
+    override fun onStop() {
+        // Jendela PiP ditutup / aplikasi benar-benar di belakang
+        webView.onPause()
+        super.onStop()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        webView.onResume()
+    }
+
+    // ---------- Picture-in-Picture ----------
+
+    private inner class Bridge {
+        @JavascriptInterface
+        fun onVideoState(playing: Boolean, width: Int, height: Int) {
+            runOnUiThread {
+                videoPlaying = playing
+                if (width > 0 && height > 0) {
+                    // Batas rasio yang diizinkan Android: 1:2.39 sampai 2.39:1
+                    val r = (width.toFloat() / height).coerceIn(0.42f, 2.39f)
+                    videoRatio = Rational((r * 1000).toInt(), 1000)
+                }
+                updatePipParams()
+            }
+        }
+    }
+
+    private fun pipParams(): PictureInPictureParams {
+        val builder = PictureInPictureParams.Builder().setAspectRatio(videoRatio)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Android 12+: otomatis masuk PiP saat keluar aplikasi ketika video diputar
+            builder.setAutoEnterEnabled(videoPlaying).setSeamlessResizeEnabled(true)
+        }
+        return builder.build()
+    }
+
+    private fun updatePipParams() {
+        if (!pipSupported) return
+        try { setPictureInPictureParams(pipParams()) } catch (_: Exception) {}
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // Android 8-11: masuk PiP manual saat tombol Home ditekan
+        if (pipSupported && videoPlaying && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            try { enterPictureInPictureMode(pipParams()) } catch (_: Exception) {}
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPip: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPip, newConfig)
+        if (isInPip) {
+            progress.visibility = View.GONE
+            gestureIndicator.visibility = View.GONE
+        }
+        // Kalau tidak sedang fullscreen, perbesar video di dalam halaman supaya PiP hanya berisi video
+        if (customView == null) {
+            webView.evaluateJavascript("window.__aniviewPip && window.__aniviewPip($isInPip)", null)
+        }
+    }
+
+    // ---------- Gestur kecerahan / volume di fullscreen ----------
+
+    private val gestureListener = object : GestureFrameLayout.Listener {
+        override fun onGestureStart(side: Int) {
+            if (side < 0) {
+                val cur = window.attributes.screenBrightness
+                brightness = if (cur >= 0f) cur else try {
+                    Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS) / 255f
+                } catch (_: Exception) { 0.5f }
+            } else {
+                volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat()
+            }
+            gestureIndicator.removeCallbacks(hideIndicator)
+            gestureIndicator.visibility = View.VISIBLE
+            onGestureDrag(side, 0f)
+        }
+
+        override fun onGestureDrag(side: Int, delta: Float) {
+            if (side < 0) {
+                brightness = (brightness + delta * 1.2f).coerceIn(0.01f, 1f)
+                window.attributes = window.attributes.apply { screenBrightness = brightness }
+                val pct = (brightness * 100).toInt()
+                gestureText.text = getString(R.string.gesture_brightness, pct)
+                gestureBar.progress = pct
+            } else {
+                val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                volume = (volume + delta * max * 1.2f).coerceIn(0f, max.toFloat())
+                val v = volume.toInt()
+                if (v != audio.getStreamVolume(AudioManager.STREAM_MUSIC)) {
+                    audio.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0)
+                }
+                val pct = v * 100 / max
+                gestureText.text = getString(R.string.gesture_volume, pct)
+                gestureBar.progress = pct
+            }
+        }
+
+        override fun onGestureEnd() {
+            gestureIndicator.postDelayed(hideIndicator, 600)
+        }
+    }
+
+    private fun resetBrightness() {
+        window.attributes = window.attributes.apply {
+            screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        }
     }
 
     override fun onDestroy() {
@@ -261,6 +403,7 @@ class MainActivity : AppCompatActivity() {
             customViewCallback?.onCustomViewHidden()
             customViewCallback = null
             setSystemBarsHidden(false)
+            resetBrightness()
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
 

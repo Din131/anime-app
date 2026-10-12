@@ -50,36 +50,61 @@
     hideTimer = setTimeout(function () { el.style.opacity = '0'; chaining = false; }, CHAIN_MS);
   }
 
-  function sideOf(video, x, y) {
+  /** null = di luar video, -1 kiri, 0 tengah, 1 kanan */
+  function zoneOf(video, x, y) {
     var r = video.getBoundingClientRect();
-    if (r.width < 100 || x < r.left || x > r.right || y < r.top || y > r.bottom) return 0;
+    if (r.width < 100 || x < r.left || x > r.right || y < r.top || y > r.bottom) return null;
     var rel = (x - r.left) / r.width;
     return rel < 0.35 ? -1 : (rel > 0.65 ? 1 : 0);
   }
 
-  document.addEventListener('touchend', function (e) {
-    if (e.changedTouches.length !== 1) return;
-    var video = biggestVideo();
-    if (!video || !video.duration) return;
-    var t = e.changedTouches[0];
-    var side = sideOf(video, t.clientX, t.clientY);
-    var now = Date.now();
-    var gap = now - lastTime;
+  function kill(e) {
+    if (e.cancelable) e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  }
 
-    if (side !== 0 && side === lastSide && Math.abs(t.clientX - lastX) < 80 &&
-        (gap < DOUBLE_MS || (chaining && gap < CHAIN_MS))) {
-      seek(video, side);
-      chaining = true;
-      lastTime = now;
-      // Cegah player menganggapnya klik / double-click (misalnya toggle fullscreen)
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
+  // Ketukan kedua (dan seterusnya) diblokir sejak awal sentuhan, sebelum player sempat
+  // melihatnya. Dengan begitu player tidak pernah mendeteksi "double tap" miliknya sendiri
+  // (yang biasanya dipakai untuk masuk/keluar fullscreen).
+  var blocking = false;
+
+  window.addEventListener('pointerdown', function (e) {
+    if (!e.isPrimary) { blocking = false; return; }
+    var video = biggestVideo();
+    var zone = video ? zoneOf(video, e.clientX, e.clientY) : null;
+    if (zone === null) { blocking = false; chaining = false; lastSide = null; return; }
+
+    var gap = Date.now() - lastTime;
+    var isDouble = zone === lastSide && Math.abs(e.clientX - lastX) < 80 &&
+      (gap < DOUBLE_MS || (chaining && zone !== 0 && gap < CHAIN_MS));
+
+    if (isDouble) {
+      blocking = true;
+      kill(e);
+      if (zone !== 0 && video.duration) {
+        seek(video, zone);
+        chaining = true;
+      } else {
+        chaining = false; // ketuk 2x di tengah: tidak melakukan apa-apa
+      }
       return;
     }
-    if (side !== lastSide) chaining = false;
-    lastTime = now; lastX = t.clientX; lastSide = side;
+    blocking = false;
+    if (zone !== lastSide) chaining = false;
+    lastX = e.clientX; lastSide = zone;
   }, { capture: true, passive: false });
+
+  window.addEventListener('pointerup', function (e) {
+    if (!e.isPrimary) return;
+    lastTime = Date.now();
+    if (blocking) kill(e);
+  }, { capture: true, passive: false });
+
+  // Event lanjutan dari ketukan yang diblokir juga ikut dibuang
+  ['pointercancel', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click', 'dblclick'].forEach(function (type) {
+    window.addEventListener(type, function (e) { if (blocking) kill(e); }, { capture: true, passive: false });
+  });
 
   // ---------- Status video untuk Picture-in-Picture ----------
   function report(e) {
@@ -126,13 +151,9 @@
     if (e.data && typeof e.data === 'object' && '__aniviewPip' in e.data) setPip(!!e.data.__aniviewPip);
   });
 
-  // Matikan double-click bawaan player di zona kiri/kanan
-  document.addEventListener('dblclick', function (e) {
+  // Jaga-jaga: double-click di area video tidak pernah diteruskan ke player
+  window.addEventListener('dblclick', function (e) {
     var video = biggestVideo();
-    if (video && sideOf(video, e.clientX, e.clientY) !== 0) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-    }
+    if (video && zoneOf(video, e.clientX, e.clientY) !== null) kill(e);
   }, true);
 })();

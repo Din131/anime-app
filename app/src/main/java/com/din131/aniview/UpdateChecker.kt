@@ -26,7 +26,6 @@ class UpdateChecker(private val activity: Activity) {
     companion object {
         private const val REPO = "Din131/anime-app"
         private const val APK_NAME = "AniView.apk"
-        private const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L // paling sering tiap 6 jam
         private const val PREFS = "update"
     }
 
@@ -37,12 +36,23 @@ class UpdateChecker(private val activity: Activity) {
         PackageInfoCompat.getLongVersionCode(info)
     }
 
-    /** Dipanggil saat aplikasi dibuka. */
-    fun checkInBackground() {
-        val last = prefs.getLong("last_check", 0L)
-        if (System.currentTimeMillis() - last < CHECK_INTERVAL_MS) return
+    /**
+     * Hapus file APK update yang sudah terpasang (versinya <= versi sekarang).
+     * APK yang belum sempat di-install dibiarkan.
+     */
+    private fun cleanupInstalledApks() {
+        val dir = activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: return
+        dir.listFiles()?.forEach { f ->
+            if (!f.name.endsWith(".apk")) return@forEach
+            val ver = f.name.removeSuffix(".apk").substringAfterLast('.').toLongOrNull()
+            if (ver == null || ver <= currentVersion) f.delete()
+        }
+    }
 
+    /** Dipanggil setiap kali aplikasi dibuka. */
+    fun checkInBackground() {
         Thread {
+            try { cleanupInstalledApks() } catch (_: Exception) {}
             try {
                 val conn = URL("https://api.github.com/repos/$REPO/releases/latest")
                     .openConnection() as HttpURLConnection
@@ -52,8 +62,6 @@ class UpdateChecker(private val activity: Activity) {
                 if (conn.responseCode != 200) return@Thread
                 val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
                 conn.disconnect()
-
-                prefs.edit().putLong("last_check", System.currentTimeMillis()).apply()
 
                 val tag = json.optString("tag_name")             // contoh: v1.0.9
                 val latest = tag.substringAfterLast('.').toLongOrNull() ?: return@Thread
@@ -95,8 +103,6 @@ class UpdateChecker(private val activity: Activity) {
             activity.startActivity(
                 Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}"))
             )
-            // Tanya lagi saat aplikasi dibuka berikutnya
-            prefs.edit().putLong("last_check", 0L).apply()
             return
         }
 

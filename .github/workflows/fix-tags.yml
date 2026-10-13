@@ -1,0 +1,33 @@
+name: Rapikan tag rilis lama
+
+# Sekali pakai: pindahkan tag v1.0.1 - v1.0.7 ke commit yang sudah dibersihkan
+# (isi kode identik, hanya pesan commit yang berbeda). File ini dihapus setelah selesai.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-tags.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pindahkan tag ke commit yang bersih
+        run: |
+          set -e
+          git fetch --force --tags origin
+          for t in v1.0.1 v1.0.2 v1.0.3 v1.0.4 v1.0.5 v1.0.6 v1.0.7; do
+            tree=$(git rev-parse "$t^{tree}")
+            new=$(git log origin/main --format='%H %T' | awk -v tr="$tree" '$2==tr{print $1; exit}')
+            if [ -z "$new" ]; then echo "$t: pasangan tidak ditemukan, dilewati"; continue; fi
+            git tag -f "$t" "$new"
+            git push --force origin "refs/tags/$t"
+            echo "$t -> $new"
+          done

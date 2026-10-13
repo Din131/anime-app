@@ -3,6 +3,10 @@ name: Build APK
 on:
   push:
     branches: [main]
+    # Perubahan yang hanya menyentuh workflow atau README tidak membuat rilis baru
+    paths-ignore:
+      - '.github/**'
+      - 'README.md'
   workflow_dispatch:
 
 permissions:

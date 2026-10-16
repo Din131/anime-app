@@ -106,6 +106,97 @@
     window.addEventListener(type, function (e) { if (blocking) kill(e); }, { capture: true, passive: false });
   });
 
+  // ---------- Lanjutkan dari posisi terakhir ----------
+  // Posisi disimpan per halaman episode lewat aplikasi (window.AniView), jadi tetap
+  // bekerja walaupun video diputar di dalam iframe dari domain lain.
+  var MIN_DURATION = 300;   // abaikan video pendek (iklan, trailer)
+  var END_MARGIN = 90;      // di menit-menit terakhir (ending) dianggap sudah selesai
+  var SAVE_EVERY = 5000;
+
+  function epKey() {
+    try { return (window.AniView && window.AniView.pageUrl()) || ''; } catch (_) { return ''; }
+  }
+  function fmt(t) {
+    t = Math.floor(t);
+    var h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
+    return (h ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  function toast(text) {
+    var el = document.getElementById('__aniview_toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = '__aniview_toast';
+      el.style.cssText = 'position:fixed;left:50%;bottom:18%;transform:translateX(-50%);z-index:2147483647;' +
+        'background:rgba(0,0,0,.7);color:#fff;font:600 14px sans-serif;padding:9px 16px;' +
+        'border-radius:20px;pointer-events:none;transition:opacity .3s;opacity:0;white-space:nowrap';
+    }
+    var host = document.fullscreenElement || document.webkitFullscreenElement || document.body || document.documentElement;
+    if (host.tagName === 'VIDEO') host = host.parentNode || document.body;
+    if (el.parentNode !== host) host.appendChild(el);
+    el.textContent = text;
+    el.style.opacity = '1';
+    clearTimeout(el.__t);
+    el.__t = setTimeout(function () { el.style.opacity = '0'; }, 2500);
+  }
+
+  function savePos(v) {
+    if (!window.AniView || !v.__aniviewKey || !(v.duration >= MIN_DURATION)) return;
+    var t = v.currentTime;
+    try {
+      // Hampir selesai -> hapus, supaya dibuka berikutnya mulai dari awal
+      window.AniView.savePosition(v.__aniviewKey, (t > v.duration - END_MARGIN || t < 10) ? 0 : t);
+    } catch (_) {}
+  }
+
+  function tryResume(v) {
+    if (v.__aniviewResumed || !window.AniView || !(v.duration >= MIN_DURATION)) return;
+    v.__aniviewResumed = true;
+    v.__aniviewKey = epKey();
+    if (!v.__aniviewKey) return;
+    var pos = 0;
+    try { pos = window.AniView.getPosition(v.__aniviewKey); } catch (_) {}
+    if (pos > 10 && pos < v.duration - END_MARGIN && v.currentTime < pos - 5) {
+      v.currentTime = pos;
+      toast('Lanjut dari ' + fmt(pos));
+    }
+  }
+
+  // Player yang sama dipakai ulang untuk episode lain: mulai hitung ulang
+  document.addEventListener('loadstart', function (e) {
+    var v = e.target;
+    if (v.tagName !== 'VIDEO') return;
+    v.__aniviewResumed = false;
+    v.__aniviewKey = '';
+  }, true);
+  document.addEventListener('loadedmetadata', function (e) {
+    if (e.target.tagName === 'VIDEO') tryResume(e.target);
+  }, true);
+  document.addEventListener('playing', function (e) {
+    var v = e.target;
+    if (v.tagName !== 'VIDEO') return;
+    tryResume(v); // sebagian player baru tahu durasinya saat mulai diputar
+  }, true);
+  document.addEventListener('timeupdate', function (e) {
+    var v = e.target;
+    if (v.tagName !== 'VIDEO' || v.paused) return;
+    var now = Date.now();
+    if (now - (v.__aniviewSaved || 0) < SAVE_EVERY) return;
+    v.__aniviewSaved = now;
+    savePos(v);
+  }, true);
+  ['pause', 'ended', 'seeked'].forEach(function (ev) {
+    document.addEventListener(ev, function (e) {
+      if (e.target.tagName === 'VIDEO') savePos(e.target);
+    }, true);
+  });
+  // Simpan juga saat halaman ditinggalkan / aplikasi ditutup
+  var saveAll = function () {
+    var vids = document.getElementsByTagName('video');
+    for (var i = 0; i < vids.length; i++) savePos(vids[i]);
+  };
+  window.addEventListener('pagehide', saveAll);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) saveAll(); });
+
   // ---------- Status video untuk Picture-in-Picture ----------
   // Hanya video yang benar-benar ditonton yang dihitung: sedang jalan, bersuara, dan
   // cukup besar. Trailer/preview yang diputar otomatis tanpa suara tidak dihitung.

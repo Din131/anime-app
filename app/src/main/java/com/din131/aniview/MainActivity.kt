@@ -259,7 +259,39 @@ class MainActivity : AppCompatActivity() {
                 updatePipParams()
             }
         }
+
+        // ---------- Lanjutkan tontonan ----------
+        // Dipanggil dari player.js (termasuk dari iframe player). Posisi disimpan per
+        // halaman episode, supaya video lanjut dari detik terakhir saat dibuka lagi.
+
+        /** Alamat halaman episode yang sedang dibuka (frame utama). */
+        @JavascriptInterface
+        fun pageUrl(): String = currentPageUrl
+
+        @JavascriptInterface
+        fun getPosition(key: String): Double =
+            resumePrefs.getFloat(key, 0f).toDouble()
+
+        @JavascriptInterface
+        fun savePosition(key: String, seconds: Double) {
+            if (key.isEmpty()) return
+            val edit = resumePrefs.edit()
+            if (seconds <= 0.0) {
+                edit.remove(key)
+            } else {
+                edit.putFloat(key, seconds.toFloat())
+                // Batasi jumlah episode yang diingat
+                val all = resumePrefs.all
+                if (all.size > 300) all.keys.take(all.size - 300).forEach { edit.remove(it) }
+            }
+            edit.apply()
+        }
     }
+
+    private val resumePrefs by lazy { getSharedPreferences("resume", MODE_PRIVATE) }
+
+    /** Diperbarui dari thread UI, dibaca dari thread JavaScript. */
+    @Volatile private var currentPageUrl = ""
 
     private fun pipParams(): PictureInPictureParams {
         val builder = PictureInPictureParams.Builder().setAspectRatio(videoRatio)
@@ -442,8 +474,14 @@ class MainActivity : AppCompatActivity() {
 
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
             errorView.visibility = View.GONE
+            url?.let { currentPageUrl = it }
             // Pindah halaman: video di halaman sebelumnya sudah tidak diputar
             stopVideoState()
+        }
+
+        // Situs berpindah episode tanpa memuat ulang halaman (pushState), jadi ikuti di sini juga
+        override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
+            url?.let { currentPageUrl = it }
         }
 
         override fun onPageFinished(view: WebView, url: String?) {

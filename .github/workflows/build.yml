@@ -12,6 +12,11 @@ on:
 permissions:
   contents: write
 
+env:
+  # Repo dibuat ulang setelah v1.0.15, jadi penomoran dilanjutkan dari sana
+  # supaya aplikasi yang sudah terpasang tetap menerima update.
+  VERSION_OFFSET: 15
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -34,6 +39,9 @@ jobs:
             -o app/src/main/assets/hosts.txt || echo "# kosong" > app/src/main/assets/hosts.txt
           wc -l app/src/main/assets/hosts.txt
 
+      - name: Tentukan nomor versi
+        run: echo "APP_VERSION=$(( ${{ github.run_number }} + VERSION_OFFSET ))" >> "$GITHUB_ENV"
+
       - name: Build APK
         run: gradle assembleRelease --no-daemon --stacktrace
 
@@ -48,8 +56,8 @@ jobs:
       - name: Terbitkan ke Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Anikoto Watch v1.0.${{ github.run_number }}
+          tag_name: v1.0.${{ env.APP_VERSION }}
+          name: Anikoto Watch v1.0.${{ env.APP_VERSION }}
           body: Unduh **AniView.apk** di bawah, lalu install di HP.
           files: AniView.apk
           make_latest: true

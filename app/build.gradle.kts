@@ -12,8 +12,10 @@ android {
         minSdk = 26
         targetSdk = 35
         // Naik otomatis tiap build di GitHub Actions supaya APK baru bisa di-install di atas yang lama
-        versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
-        versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+        // Nomor versi dari workflow (lihat VERSION_OFFSET di .github/workflows/build.yml)
+        val appVersion = (System.getenv("APP_VERSION") ?: "1").toInt()
+        versionCode = appVersion
+        versionName = "1.0.$appVersion"
     }
 
     signingConfigs {

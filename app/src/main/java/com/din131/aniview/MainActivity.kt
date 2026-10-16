@@ -83,6 +83,9 @@ class MainActivity : AppCompatActivity() {
         packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
     }
 
+    /** Dibaca dari thread jaringan WebView, jadi disimpan sekali di sini. */
+    @Volatile private var userAgent = ""
+
     private var popupView: WebView? = null
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
@@ -105,6 +108,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         AdBlocker.init(this)
+        DohClient.init(cacheDir)
 
         webView = findViewById(R.id.webView)
         progress = findViewById(R.id.progress)
@@ -158,6 +162,7 @@ class MainActivity : AppCompatActivity() {
             // Sembunyikan penanda "wv" supaya situs memperlakukan seperti Chrome biasa
             userAgentString = userAgentString.replace("; wv", "")
         }
+        userAgent = webView.settings.userAgentString
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
             setAcceptThirdPartyCookies(webView, true)
@@ -402,7 +407,10 @@ class MainActivity : AppCompatActivity() {
             val host = request.url.host
             // Jangan blokir domain situs utama sendiri
             if (!isAllowed(host) && AdBlocker.isBlocked(host)) return emptyResponse
-            return null
+            // Halaman login pihak ketiga dibiarkan memakai jaringan biasa
+            if (isAuth(host)) return null
+            // Ambil lewat DNS-over-HTTPS supaya tidak terkena blokir DNS operator
+            return DohClient.fetch(request, userAgent)
         }
 
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {

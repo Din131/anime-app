@@ -11,8 +11,8 @@ android {
         applicationId = "com.din131.aniview"
         minSdk = 26
         targetSdk = 35
-        // Naik otomatis tiap build di GitHub Actions supaya APK baru bisa di-install di atas yang lama
-        // Nomor versi dari workflow (lihat VERSION_OFFSET di .github/workflows/build.yml)
+        // Naik otomatis tiap build di GitHub Actions supaya APK baru bisa di-install di atas yang lama.
+        // Nilainya dari workflow (lihat VERSION_OFFSET di .github/workflows/build.yml).
         val appVersion = (System.getenv("APP_VERSION") ?: "1").toInt()
         versionCode = appVersion
         versionName = "1.0.$appVersion"
